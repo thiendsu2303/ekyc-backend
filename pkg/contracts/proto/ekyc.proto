@@ -1,0 +1,200 @@
+syntax = "proto3";
+
+package ekyc;
+
+option go_package = "github.com/ekyc-backend/pkg/contracts/proto";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+
+// Identity Service
+service IdentityService {
+  rpc CreateSession(CreateSessionRequest) returns (CreateSessionResponse);
+  rpc GetSessionStatus(GetSessionStatusRequest) returns (GetSessionStatusResponse);
+  rpc ApplyAdminDecision(ApplyAdminDecisionRequest) returns (ApplyAdminDecisionResponse);
+}
+
+// Scoring Service
+service ScoringService {
+  rpc Score(ScoreRequest) returns (ScoreResponse);
+}
+
+// Storage Service
+service StorageService {
+  rpc GetPresignedPutURL(GetPresignedPutURLRequest) returns (GetPresignedPutURLResponse);
+  rpc GetPresignedGetURL(GetPresignedGetURLRequest) returns (GetPresignedGetURLResponse);
+}
+
+// Auth Service
+service AuthService {
+  rpc SignIn(SignInRequest) returns (SignInResponse);
+  rpc SignUp(SignUpRequest) returns (SignUpResponse);
+}
+
+// Identity Service Messages
+message CreateSessionRequest {
+  string user_id = 1;
+}
+
+message CreateSessionResponse {
+  string session_id = 1;
+  SessionStatus status = 2;
+  google.protobuf.Timestamp created_at = 3;
+}
+
+message GetSessionStatusRequest {
+  string session_id = 1;
+}
+
+message GetSessionStatusResponse {
+  string session_id = 1;
+  SessionStatus status = 2;
+  int32 score = 3;
+  repeated string pending_steps = 4;
+  google.protobuf.Timestamp updated_at = 5;
+}
+
+message ApplyAdminDecisionRequest {
+  string session_id = 1;
+  DecisionStatus decision = 2;
+  string note = 3;
+  string decided_by = 4;
+}
+
+message ApplyAdminDecisionResponse {
+  string session_id = 1;
+  DecisionStatus decision = 2;
+  string note = 3;
+  google.protobuf.Timestamp decided_at = 4;
+}
+
+// Scoring Service Messages
+message ScoreRequest {
+  string session_id = 1;
+  OCRResult ocr_result = 2;
+  FaceMatchResult face_result = 3;
+  LivenessResult liveness_result = 4;
+  ContextInfo context = 5;
+}
+
+message ScoreResponse {
+  string session_id = 1;
+  SessionStatus status = 2;
+  int32 score = 3;
+  repeated string reasons = 4;
+  google.protobuf.Timestamp scored_at = 5;
+}
+
+// Storage Service Messages
+message GetPresignedPutURLRequest {
+  string session_id = 1;
+  string object_key = 2;
+  string content_type = 3;
+  int32 expiration_seconds = 4;
+}
+
+message GetPresignedPutURLResponse {
+  string presigned_url = 1;
+  int32 expires_in = 2;
+}
+
+message GetPresignedGetURLRequest {
+  string object_key = 1;
+  int32 expiration_seconds = 2;
+}
+
+message GetPresignedGetURLResponse {
+  string presigned_url = 1;
+  int32 expires_in = 2;
+}
+
+// Auth Service Messages
+message SignInRequest {
+  string email = 1;
+  string password = 2;
+}
+
+message SignInResponse {
+  string token = 1;
+  string user_id = 2;
+  int32 expires_in = 3;
+}
+
+message SignUpRequest {
+  string email = 1;
+  string password = 2;
+}
+
+message SignUpResponse {
+  string user_id = 1;
+  string message = 2;
+}
+
+// Result Messages
+message OCRResult {
+  float quality = 1;
+  string full_name = 2;
+  string id_number = 3;
+  string dob = 4;
+  string issue_date = 5;
+  string expiry_date = 6;
+  string address = 7;
+  map<string, string> extracted_fields = 8;
+}
+
+message FaceMatchResult {
+  float similarity = 1;
+  float threshold = 2;
+  bool passed = 3;
+  float confidence = 4;
+}
+
+message LivenessResult {
+  bool passed = 1;
+  float confidence = 2;
+  string liveness_type = 3;
+  map<string, float> metrics = 4;
+}
+
+message ContextInfo {
+  string device_info = 1;
+  string location = 2;
+  string ip_address = 3;
+  map<string, string> additional_context = 4;
+}
+
+// Enums
+enum SessionStatus {
+  SESSION_STATUS_UNSPECIFIED = 0;
+  CREATED = 1;
+  DOC_UPLOADED = 2;
+  SELFIE_UPLOADED = 3;
+  LIVENESS_PENDING = 4;
+  UNDER_REVIEW = 5;
+  APPROVED = 6;
+  REJECTED = 7;
+}
+
+enum DecisionStatus {
+  DECISION_STATUS_UNSPECIFIED = 0;
+  APPROVED = 1;
+  REVIEW = 2;
+  REJECTED = 3;
+}
+
+enum ArtifactType {
+  ARTIFACT_TYPE_UNSPECIFIED = 0;
+  DOC_FRONT = 1;
+  DOC_BACK = 2;
+  PASSPORT = 3;
+  SELFIE = 4;
+  LIVENESS_CLIP = 5;
+  OTHER = 6;
+}
+
+enum ResultKind {
+  RESULT_KIND_UNSPECIFIED = 0;
+  OCR = 1;
+  FACE = 2;
+  LIVENESS = 3;
+}

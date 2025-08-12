@@ -1,0 +1,13 @@
+go 1.22
+
+use (
+	./pkg
+	./services/admin
+	./services/api-gateway
+	./services/doc-ocr
+	./services/face-match
+	./services/identity
+	./services/liveness
+	./services/scoring
+	./services/storage-svc
+)

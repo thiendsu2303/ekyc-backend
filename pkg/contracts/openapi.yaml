@@ -1,0 +1,584 @@
+openapi: 3.0.3
+info:
+  title: eKYC Backend API
+  description: Backend API for electronic Know Your Customer system
+  version: 1.0.0
+  contact:
+    name: eKYC Team
+    email: support@ekyc.com
+
+servers:
+  - url: http://localhost:8080
+    description: Development server
+  - url: https://api.ekyc.com
+    description: Production server
+
+tags:
+  - name: Authentication
+    description: User authentication operations
+  - name: eKYC
+    description: eKYC session management
+  - name: Admin
+    description: Administrative operations
+
+paths:
+  /api/v1/auth/signup:
+    post:
+      tags:
+        - Authentication
+      summary: User registration
+      operationId: signup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignupRequest'
+      responses:
+        '201':
+          description: User created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SignupResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: User already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/auth/signin:
+    post:
+      tags:
+        - Authentication
+      summary: User authentication
+      operationId: signin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SigninRequest'
+      responses:
+        '200':
+          description: Authentication successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SigninResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/ekyc/session:
+    post:
+      tags:
+        - eKYC
+      summary: Create new eKYC session
+      operationId: createSession
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSessionRequest'
+      responses:
+        '201':
+          description: Session created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateSessionResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/ekyc/{id}/document:
+    post:
+      tags:
+        - eKYC
+      summary: Upload document for eKYC session
+      operationId: uploadDocument
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: eKYC session ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UploadDocumentRequest'
+      responses:
+        '200':
+          description: Document uploaded successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadDocumentResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/ekyc/{id}/selfie:
+    post:
+      tags:
+        - eKYC
+      summary: Upload selfie for eKYC session
+      operationId: uploadSelfie
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: eKYC session ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UploadSelfieRequest'
+      responses:
+        '200':
+          description: Selfie uploaded successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadSelfieResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/ekyc/{id}/liveness:
+    post:
+      tags:
+        - eKYC
+      summary: Perform liveness check
+      operationId: performLiveness
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: eKYC session ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LivenessRequest'
+      responses:
+        '200':
+          description: Liveness check completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LivenessResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/ekyc/{id}/status:
+    get:
+      tags:
+        - eKYC
+      summary: Get eKYC session status
+      operationId: getSessionStatus
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: eKYC session ID
+      responses:
+        '200':
+          description: Session status retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionStatusResponse'
+        '404':
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/admin/sessions:
+    get:
+      tags:
+        - Admin
+      summary: List all eKYC sessions
+      operationId: listSessions
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [CREATED, DOC_UPLOADED, SELFIE_UPLOADED, LIVENESS_PENDING, UNDER_REVIEW, APPROVED, REJECTED]
+          description: Filter by session status
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 100
+          description: Maximum number of sessions to return
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+          description: Number of sessions to skip
+      responses:
+        '200':
+          description: Sessions retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListSessionsResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/admin/sessions/{id}/decision:
+    post:
+      tags:
+        - Admin
+      summary: Make decision on eKYC session
+      operationId: makeDecision
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: eKYC session ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecisionRequest'
+      responses:
+        '200':
+          description: Decision applied successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DecisionResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    SignupRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          description: User email address
+        password:
+          type: string
+          minLength: 8
+          description: User password
+
+    SignupResponse:
+      type: object
+      properties:
+        user_id:
+          type: string
+          format: uuid
+          description: Created user ID
+        message:
+          type: string
+          description: Success message
+
+    SigninRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          description: User email address
+        password:
+          type: string
+          description: User password
+
+    SigninResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          description: JWT access token
+        user_id:
+          type: string
+          format: uuid
+          description: User ID
+        expires_in:
+          type: integer
+          description: Token expiration time in seconds
+
+    CreateSessionRequest:
+      type: object
+      properties:
+        user_id:
+          type: string
+          format: uuid
+          description: User ID
+
+    CreateSessionResponse:
+      type: object
+      properties:
+        session_id:
+          type: string
+          format: uuid
+          description: Created eKYC session ID
+        status:
+          type: string
+          enum: [CREATED]
+          description: Session status
+
+    UploadDocumentRequest:
+      type: object
+      properties:
+        document_type:
+          type: string
+          enum: [DOC_FRONT, DOC_BACK, PASSPORT]
+          description: Type of document
+        metadata:
+          type: object
+          description: Additional document metadata
+
+    UploadDocumentResponse:
+      type: object
+      properties:
+        presigned_url:
+          type: string
+          description: Presigned URL for document upload
+        expires_in:
+          type: integer
+          description: URL expiration time in seconds
+
+    UploadSelfieRequest:
+      type: object
+      properties:
+        metadata:
+          type: object
+          description: Additional selfie metadata
+
+    UploadSelfieResponse:
+      type: object
+      properties:
+        presigned_url:
+          type: string
+          description: Presigned URL for selfie upload
+        expires_in:
+          type: integer
+          description: URL expiration time in seconds
+
+    LivenessRequest:
+      type: object
+      properties:
+        metadata:
+          type: object
+          description: Additional liveness check metadata
+
+    LivenessResponse:
+      type: object
+      properties:
+        presigned_url:
+          type: string
+          description: Presigned URL for liveness video upload
+        expires_in:
+          type: integer
+          description: URL expiration time in seconds
+
+    SessionStatusResponse:
+      type: object
+      properties:
+        session_id:
+          type: string
+          format: uuid
+          description: eKYC session ID
+        status:
+          type: string
+          enum: [CREATED, DOC_UPLOADED, SELFIE_UPLOADED, LIVENESS_PENDING, UNDER_REVIEW, APPROVED, REJECTED]
+          description: Current session status
+        score:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Session score (if available)
+        pending_steps:
+          type: array
+          items:
+            type: string
+          description: List of pending verification steps
+
+    ListSessionsResponse:
+      type: object
+      properties:
+        sessions:
+          type: array
+          items:
+            $ref: '#/components/schemas/SessionSummary'
+        total:
+          type: integer
+          description: Total number of sessions
+        limit:
+          type: integer
+          description: Number of sessions returned
+        offset:
+          type: integer
+          description: Number of sessions skipped
+
+    SessionSummary:
+      type: object
+      properties:
+        session_id:
+          type: string
+          format: uuid
+          description: eKYC session ID
+        user_id:
+          type: string
+          format: uuid
+          description: User ID
+        status:
+          type: string
+          enum: [CREATED, DOC_UPLOADED, SELFIE_UPLOADED, LIVENESS_PENDING, UNDER_REVIEW, APPROVED, REJECTED]
+          description: Session status
+        created_at:
+          type: string
+          format: date-time
+          description: Session creation timestamp
+
+    DecisionRequest:
+      type: object
+      required:
+        - decision
+      properties:
+        decision:
+          type: string
+          enum: [APPROVED, REJECTED]
+          description: Admin decision
+        note:
+          type: string
+          description: Optional note about the decision
+
+    DecisionResponse:
+      type: object
+      properties:
+        session_id:
+          type: string
+          format: uuid
+          description: eKYC session ID
+        decision:
+          type: string
+          enum: [APPROVED, REJECTED]
+          description: Applied decision
+        note:
+          type: string
+          description: Decision note
+        decided_at:
+          type: string
+          format: date-time
+          description: Decision timestamp
+
+    Error:
+      type: object
+      properties:
+        code:
+          type: integer
+          description: HTTP status code
+        message:
+          type: string
+          description: Error message
+        details:
+          type: string
+          description: Additional error details
+        request_id:
+          type: string
+          description: Request ID for tracking
+        correlation_id:
+          type: string
+          description: Correlation ID for tracing

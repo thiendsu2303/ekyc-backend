@@ -1,0 +1,104 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  # - "first_rules.yml"
+  # - "second_rules.yml"
+
+scrape_configs:
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # API Gateway
+  - job_name: 'api-gateway'
+    static_configs:
+      - targets: ['api-gateway:8080']
+    metrics_path: '/metrics'
+    scrape_interval: 5s
+
+  # Identity Service
+  - job_name: 'identity'
+    static_configs:
+      - targets: ['identity:8081']
+    metrics_path: '/metrics'
+    scrape_interval: 5s
+
+  # Document OCR Service
+  - job_name: 'doc-ocr'
+    static_configs:
+      - targets: ['doc-ocr:8082']
+    metrics_path: '/metrics'
+    scrape_interval: 5s
+
+  # Face Match Service
+  - job_name: 'face-match'
+    static_configs:
+      - targets: ['face-match:8083']
+    metrics_path: '/metrics'
+    scrape_interval: 5s
+
+  # Liveness Service
+  - job_name: 'liveness'
+    static_configs:
+      - targets: ['liveness:8084']
+    metrics_path: '/metrics'
+    scrape_interval: 5s
+
+  # Scoring Service
+  - job_name: 'scoring'
+    static_configs:
+      - targets: ['scoring:8085']
+    metrics_path: '/metrics'
+    scrape_interval: 5s
+
+  # Storage Service
+  - job_name: 'storage-svc'
+    static_configs:
+      - targets: ['storage-svc:8086']
+    metrics_path: '/metrics'
+    scrape_interval: 5s
+
+  # Admin Service
+  - job_name: 'admin'
+    static_configs:
+      - targets: ['admin:8087']
+    metrics_path: '/metrics'
+    scrape_interval: 5s
+
+  # OpenTelemetry Collector
+  - job_name: 'otel-collector'
+    static_configs:
+      - targets: ['otel-collector:9464']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # Tempo
+  - job_name: 'tempo'
+    static_configs:
+      - targets: ['tempo:3200']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # NATS
+  - job_name: 'nats'
+    static_configs:
+      - targets: ['nats:8222']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # PostgreSQL (if using postgres_exporter)
+  # - job_name: 'postgres'
+  #   static_configs:
+  #     - targets: ['postgres-exporter:9187']
+  #   metrics_path: '/metrics'
+  #   scrape_interval: 10s
+
+  # Redis (if using redis_exporter)
+  # - job_name: 'redis'
+  #   static_configs:
+  #     - targets: ['redis-exporter:9121']
+  #   metrics_path: '/metrics'
+  #   scrape_interval: 10s

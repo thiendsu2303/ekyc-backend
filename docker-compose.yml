@@ -1,0 +1,455 @@
+version: '3.8'
+
+services:
+  # Database
+  postgres:
+    image: postgres:16
+    container_name: ekyc-postgres
+    environment:
+      POSTGRES_DB: ekyc
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: ekyc-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # NATS
+  nats:
+    image: nats:2-alpine
+    container_name: ekyc-nats
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    command: ["-js", "-m", "8222"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8222/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MinIO
+  minio:
+    image: minio/minio:latest
+    container_name: ekyc-minio
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # OpenTelemetry Collector
+  otel-collector:
+    image: otel/opentelemetry-collector:latest
+    container_name: ekyc-otel-collector
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+      - "55679:55679" # zpages
+    volumes:
+      - ./deploy/otel-collector/collector.yaml:/etc/otel-collector-config.yaml
+    command: ["--config", "/etc/otel-collector-config.yaml"]
+    depends_on:
+      - tempo
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:55679"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Tempo (Distributed Tracing)
+  tempo:
+    image: grafana/tempo:latest
+    container_name: ekyc-tempo
+    ports:
+      - "3200:3200"   # tempo
+      - "9096:9096"   # tempo
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./deploy/tempo/tempo.yaml:/etc/tempo.yaml
+      - tempo_data:/tmp/tempo
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3200/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Prometheus
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: ekyc-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    depends_on:
+      - api-gateway
+      - identity
+      - doc-ocr
+      - face-match
+      - liveness
+      - scoring
+      - storage-svc
+      - admin
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Grafana
+  grafana:
+    image: grafana/grafana:latest
+    container_name: ekyc-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning
+      - ./deploy/grafana/dashboards:/var/lib/grafana/dashboards
+    depends_on:
+      - prometheus
+      - tempo
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # API Gateway
+  api-gateway:
+    build:
+      context: .
+      dockerfile: services/api-gateway/Dockerfile
+    container_name: ekyc-api-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      SERVICE_NAME: api-gateway
+      PORT: 8080
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: ekyc
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      NATS_HOST: nats
+      NATS_PORT: 4222
+      OTEL_COLLECTOR_ENDPOINT: otel-collector:4317
+      JWT_SECRET: your-secret-key-change-in-production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      otel-collector:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Identity Service
+  identity:
+    build:
+      context: .
+      dockerfile: services/identity/Dockerfile
+    container_name: ekyc-identity
+    ports:
+      - "8081:8081"
+    environment:
+      SERVICE_NAME: identity
+      PORT: 8081
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: ekyc
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      NATS_HOST: nats
+      NATS_PORT: 4222
+      OTEL_COLLECTOR_ENDPOINT: otel-collector:4317
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      otel-collector:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Document OCR Service
+  doc-ocr:
+    build:
+      context: .
+      dockerfile: services/doc-ocr/Dockerfile
+    container_name: ekyc-doc-ocr
+    ports:
+      - "8082:8082"
+    environment:
+      SERVICE_NAME: doc-ocr
+      PORT: 8082
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: ekyc
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      NATS_HOST: nats
+      NATS_PORT: 4222
+      OTEL_COLLECTOR_ENDPOINT: otel-collector:4317
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      otel-collector:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Face Match Service
+  face-match:
+    build:
+      context: .
+      dockerfile: services/face-match/Dockerfile
+    container_name: ekyc-face-match
+    ports:
+      - "8083:8083"
+    environment:
+      SERVICE_NAME: face-match
+      PORT: 8083
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: ekyc
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      NATS_HOST: nats
+      NATS_PORT: 4222
+      OTEL_COLLECTOR_ENDPOINT: otel-collector:4317
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      otel-collector:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8083/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Liveness Service
+  liveness:
+    build:
+      context: .
+      dockerfile: services/liveness/Dockerfile
+    container_name: ekyc-liveness
+    ports:
+      - "8084:8084"
+    environment:
+      SERVICE_NAME: liveness
+      PORT: 8084
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: ekyc
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      NATS_HOST: nats
+      NATS_PORT: 4222
+      OTEL_COLLECTOR_ENDPOINT: otel-collector:4317
+      LIVENESS_FORCE_FAIL: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      otel-collector:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8084/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Scoring Service
+  scoring:
+    build:
+      context: .
+      dockerfile: services/scoring/Dockerfile
+    container_name: ekyc-scoring
+    ports:
+      - "8085:8085"
+    environment:
+      SERVICE_NAME: scoring
+      PORT: 8085
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: ekyc
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      NATS_HOST: nats
+      NATS_PORT: 4222
+      OTEL_COLLECTOR_ENDPOINT: otel-collector:4317
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      otel-collector:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8085/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Storage Service
+  storage-svc:
+    build:
+      context: .
+      dockerfile: services/storage-svc/Dockerfile
+    container_name: ekyc-storage-svc
+    ports:
+      - "8086:8086"
+    environment:
+      SERVICE_NAME: storage-svc
+      PORT: 8086
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: ekyc
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY_ID: minioadmin
+      MINIO_SECRET_ACCESS_KEY: minioadmin
+      MINIO_BUCKET_NAME: ekyc
+      MINIO_USE_SSL: "false"
+      OTEL_COLLECTOR_ENDPOINT: otel-collector:4317
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      otel-collector:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8086/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Admin Service
+  admin:
+    build:
+      context: .
+      dockerfile: services/admin/Dockerfile
+    container_name: ekyc-admin
+    ports:
+      - "8087:8087"
+    environment:
+      SERVICE_NAME: admin
+      PORT: 8087
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: ekyc
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      OTEL_COLLECTOR_ENDPOINT: otel-collector:4317
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      otel-collector:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8087/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+  tempo_data:
+  prometheus_data:
+  grafana_data:
