@@ -8,6 +8,9 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.2.0
 	github.com/prometheus/client_golang v1.18.0
 	go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin v0.48.0
+	github.com/spf13/viper v1.18.2
+	github.com/go-chi/chi/v5 v5.0.12
+	github.com/go-playground/validator/v10 v10.17.0
 )
 
 replace github.com/ekyc-backend/pkg => ../../pkg

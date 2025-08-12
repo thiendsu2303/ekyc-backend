@@ -1,0 +1,979 @@
+openapi: 3.0.3
+info:
+  title: eKYC API Gateway
+  description: API Gateway for eKYC system providing authentication, session management, and file upload capabilities
+  version: 1.0.0
+  contact:
+    name: eKYC Development Team
+    email: dev@ekyc.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:8080
+    description: Development server
+  - url: https://api.ekyc.com
+    description: Production server
+
+security:
+  - BearerAuth: []
+
+paths:
+  /live:
+    get:
+      summary: Health check - liveness
+      description: Check if the service process is alive
+      tags:
+        - Health
+      responses:
+        '200':
+          description: Service is alive
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /ready:
+    get:
+      summary: Health check - readiness
+      description: Check if the service is ready to handle requests
+      tags:
+        - Health
+      responses:
+        '200':
+          description: Service is ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+        '503':
+          description: Service is not ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+
+  /metrics:
+    get:
+      summary: Prometheus metrics
+      description: Expose Prometheus metrics for monitoring
+      tags:
+        - Monitoring
+      responses:
+        '200':
+          description: Metrics in Prometheus format
+          content:
+            text/plain:
+              schema:
+                type: string
+
+  /api/v1/auth/signup:
+    post:
+      summary: User registration
+      description: Register a new user account
+      tags:
+        - Authentication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignUpRequest'
+      responses:
+        '201':
+          description: User created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: User already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/auth/signin:
+    post:
+      summary: User authentication
+      description: Authenticate user and receive JWT token
+      tags:
+        - Authentication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignInRequest'
+      responses:
+        '200':
+          description: Authentication successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SignInResponse'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/ekyc/session:
+    post:
+      summary: Create eKYC session
+      description: Create a new eKYC session for the authenticated user
+      tags:
+        - eKYC
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: {}
+      responses:
+        '201':
+          description: Session created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Session already exists (idempotency)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+
+  /api/v1/ekyc/{id}/document:
+    post:
+      summary: Document upload
+      description: Upload document metadata or get presigned URL
+      tags:
+        - eKYC
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Session ID
+          schema:
+            type: string
+            format: uuid
+        - name: action
+          in: query
+          required: false
+          description: Action type
+          schema:
+            type: string
+            enum: [PRESIGN]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/DocumentPresignRequest'
+                - $ref: '#/components/schemas/DocumentUploadRequest'
+      responses:
+        '200':
+          description: Document uploaded or presigned URL generated
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/PresignedURLResponse'
+                  - $ref: '#/components/schemas/UploadResponse'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/ekyc/{id}/selfie:
+    post:
+      summary: Selfie upload
+      description: Upload selfie metadata or get presigned URL
+      tags:
+        - eKYC
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Session ID
+          schema:
+            type: string
+            format: uuid
+        - name: action
+          in: query
+          required: false
+          description: Action type
+          schema:
+            type: string
+            enum: [PRESIGN]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/SelfiePresignRequest'
+                - $ref: '#/components/schemas/SelfieUploadRequest'
+      responses:
+        '200':
+          description: Selfie uploaded or presigned URL generated
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/PresignedURLResponse'
+                  - $ref: '#/components/schemas/UploadResponse'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/ekyc/{id}/liveness:
+    post:
+      summary: Liveness check upload
+      description: Upload liveness check metadata or get presigned URL
+      tags:
+        - eKYC
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Session ID
+          schema:
+            type: string
+            format: uuid
+        - name: action
+          in: query
+          required: false
+          description: Action type
+          schema:
+            type: string
+            enum: [PRESIGN]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/LivenessPresignRequest'
+                - $ref: '#/components/schemas/LivenessUploadRequest'
+      responses:
+        '200':
+          description: Liveness check uploaded or presigned URL generated
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/PresignedURLResponse'
+                  - $ref: '#/components/schemas/UploadResponse'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/ekyc/{id}/status:
+    get:
+      summary: Get session status
+      description: Get the current status of an eKYC session
+      tags:
+        - eKYC
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Session ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Session status retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionStatusResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/admin/sessions:
+    get:
+      summary: List sessions
+      description: List eKYC sessions with filtering and pagination
+      tags:
+        - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          description: Filter by status
+          schema:
+            type: string
+            enum: [CREATED, DOC_UPLOADED, SELFIE_UPLOADED, LIVENESS_PENDING, UNDER_REVIEW, APPROVED, REJECTED]
+        - name: q
+          in: query
+          required: false
+          description: Search query
+          schema:
+            type: string
+        - name: page
+          in: query
+          required: false
+          description: Page number
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: size
+          in: query
+          required: false
+          description: Page size
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Sessions retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionListResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - Admin role required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/admin/sessions/{id}:
+    get:
+      summary: Get session detail
+      description: Get detailed information about a specific session
+      tags:
+        - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Session ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Session details retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionDetailResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - Admin role required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/admin/sessions/{id}/decision:
+    post:
+      summary: Apply admin decision
+      description: Apply an admin decision to a session
+      tags:
+        - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Session ID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminDecisionRequest'
+      responses:
+        '200':
+          description: Decision applied successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - Admin role required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    # Common schemas
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+      required:
+        - success
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              example: "BAD_REQUEST"
+            message:
+              type: string
+              example: "Invalid input"
+            details:
+              type: string
+              example: "Field 'email' is required"
+            correlationId:
+              type: string
+              example: "550e8400-e29b-41d4-a716-446655440000"
+          required:
+            - code
+            - message
+      required:
+        - success
+        - error
+
+    # Health check schemas
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: "alive"
+        timestamp:
+          type: string
+          format: date-time
+        service:
+          type: string
+          example: "api-gateway"
+
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          example: "healthy"
+        timestamp:
+          type: string
+          format: date-time
+        service:
+          type: string
+          example: "api-gateway"
+        checks:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/CheckResult'
+        healthy:
+          type: boolean
+          example: true
+
+    CheckResult:
+      type: object
+      properties:
+        name:
+          type: string
+          example: "identity"
+        status:
+          type: string
+          example: "healthy"
+        message:
+          type: string
+          example: "Service responding"
+        timestamp:
+          type: string
+          format: date-time
+        healthy:
+          type: boolean
+          example: true
+
+    # Authentication schemas
+    SignUpRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          example: "user@example.com"
+        password:
+          type: string
+          minLength: 8
+          example: "password123"
+      required:
+        - email
+        - password
+
+    SignInRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          example: "user@example.com"
+        password:
+          type: string
+          example: "password123"
+      required:
+        - email
+        - password
+
+    SignInResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            accessToken:
+              type: string
+              example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+            tokenType:
+              type: string
+              example: "Bearer"
+            expiresIn:
+              type: integer
+              example: 86400
+
+    # Session schemas
+    SessionResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            sessionId:
+              type: string
+              format: uuid
+              example: "550e8400-e29b-41d4-a716-446655440000"
+            status:
+              type: string
+              example: "CREATED"
+            createdAt:
+              type: string
+              format: date-time
+
+    SessionStatusResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            sessionId:
+              type: string
+              format: uuid
+            status:
+              type: string
+              enum: [CREATED, DOC_UPLOADED, SELFIE_UPLOADED, LIVENESS_PENDING, UNDER_REVIEW, APPROVED, REJECTED]
+            score:
+              type: integer
+              minimum: 0
+              maximum: 100
+            pendingSteps:
+              type: array
+              items:
+                type: string
+            createdAt:
+              type: string
+              format: date-time
+            updatedAt:
+              type: string
+              format: date-time
+
+    # Document schemas
+    DocumentPresignRequest:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [DOC_FRONT, DOC_BACK, PASSPORT]
+          example: "DOC_FRONT"
+        contentType:
+          type: string
+          example: "image/jpeg"
+      required:
+        - type
+        - contentType
+
+    DocumentUploadRequest:
+      type: object
+      properties:
+        key:
+          type: string
+          example: "550e8400-e29b-41d4-a716-446655440000/docs/abc123"
+        type:
+          type: string
+          enum: [DOC_FRONT, DOC_BACK, PASSPORT]
+          example: "DOC_FRONT"
+      required:
+        - key
+        - type
+
+    # Selfie schemas
+    SelfiePresignRequest:
+      type: object
+      properties:
+        contentType:
+          type: string
+          example: "image/jpeg"
+      required:
+        - contentType
+
+    SelfieUploadRequest:
+      type: object
+      properties:
+        key:
+          type: string
+          example: "550e8400-e29b-41d4-a716-446655440000/selfie/def456"
+      required:
+        - key
+
+    # Liveness schemas
+    LivenessPresignRequest:
+      type: object
+      properties:
+        contentType:
+          type: string
+          example: "video/mp4"
+      required:
+        - contentType
+
+    LivenessUploadRequest:
+      type: object
+      properties:
+        key:
+          type: string
+          example: "550e8400-e29b-41d4-a716-446655440000/liveness/ghi789"
+      required:
+        - key
+
+    # Presigned URL schemas
+    PresignedURLResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            url:
+              type: string
+              example: "https://storage.example.com/upload?token=xyz"
+            key:
+              type: string
+              example: "550e8400-e29b-41d4-a716-446655440000/docs/abc123"
+            expiresAt:
+              type: string
+              format: date-time
+
+    UploadResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            accepted:
+              type: boolean
+              example: true
+            message:
+              type: string
+              example: "File uploaded successfully"
+
+    # Admin schemas
+    SessionListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/SessionSummary'
+            total:
+              type: integer
+              example: 100
+            page:
+              type: integer
+              example: 1
+            size:
+              type: integer
+              example: 20
+
+    SessionSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        status:
+          type: string
+        score:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    SessionDetailResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: '#/components/schemas/SessionDetail'
+
+    SessionDetail:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        status:
+          type: string
+        score:
+          type: integer
+        pendingSteps:
+          type: array
+          items:
+            type: string
+        documents:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentInfo'
+        selfie:
+          $ref: '#/components/schemas/SelfieInfo'
+        liveness:
+          $ref: '#/components/schemas/LivenessInfo'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    DocumentInfo:
+      type: object
+      properties:
+        type:
+          type: string
+        key:
+          type: string
+        uploadedAt:
+          type: string
+          format: date-time
+
+    SelfieInfo:
+      type: object
+      properties:
+        key:
+          type: string
+        uploadedAt:
+          type: string
+          format: date-time
+
+    LivenessInfo:
+      type: object
+      properties:
+        key:
+          type: string
+        uploadedAt:
+          type: string
+          format: date-time
+
+    AdminDecisionRequest:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [APPROVED, REJECTED]
+          example: "APPROVED"
+        note:
+          type: string
+          example: "All documents verified successfully"
+      required:
+        - status
+
+tags:
+  - name: Health
+    description: Health check endpoints
+  - name: Monitoring
+    description: Monitoring and metrics endpoints
+  - name: Authentication
+    description: User authentication endpoints
+  - name: eKYC
+    description: eKYC session management endpoints
+  - name: Admin
+    description: Administrative endpoints (admin role required)
